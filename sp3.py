@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.svm import SVR
 
 
 class Sp3(object):
@@ -30,6 +34,9 @@ class Sp3(object):
         self.fractional_day = 0.0
         self.number_of_sats = 0.0
         self.dataset = pd.DataFrame()
+        self.x_model_coeffs = []
+        self.y_model_coeffs = []
+        self.z_model_coeffs = []
 
     def parse(self, sp3_file_path):
         tmp_list = []
@@ -63,9 +70,46 @@ class Sp3(object):
                                                        'clk_pred_flag',
                                                        'manoeuvre_flag',
                                                        'orb_predict_flag'])
+        self.dataset['unix_time'] = sp3.dataset['date_time'].values.\
+                                    astype(np.int64)/1000000000
 
     def fit(self):
         """fit the model"""
+
+        # Prepare the data
+        timestamp = self.dataset['unix_time'].as_matrix().reshape(-1,1)
+        x = self.dataset['x'].as_matrix().reshape(-1,1)
+        y = self.dataset['y'].as_matrix().reshape(-1,1)
+        z = self.dataset['z'].as_matrix().reshape(-1,1)
+
+        # Scale the features and targets
+        ss_timestamp = StandardScaler()
+        timestamp = ss_timestamp.fit_transform(timestamp)
+
+        ss_x = StandardScaler()
+        x = ss_x.fit_transform(x)
+
+        ss_y = StandardScaler()
+        y = ss_y.fit_transform(x)
+
+        ss_z = StandardScaler()
+        z = ss_z.fit_transform(z)
+
+        timestamp_train_x, timestamp_test_x, x_train, x_test =\
+         train_test_split(timestamp, x, test_size=0.1, random_state=3)
+        timestamp_train_y, timestamp_test_y, y_train, y_test =\
+         train_test_split(timestamp, y, test_size=0.1, random_state=3)
+        timestamp_train_z, timestamp_test_z, z_train, z_test =\
+         train_test_split(timestamp, x, test_size=0.1, random_state=3)
+
+        svr_rbf = SVR(kernel='rbf', C=1e3, gamma=1, epsilon=0.0001, degree=1)
+        svr_rbf_x = svr_rbf.fit(timestamp_train_x, x_train).predict(timestamp_test_x)
+
+        print(svr_rbf)
+
+        plt.plot(timestamp, x, 'ro', color='g', markersize=2)
+        plt.plot(timestamp_test_x, svr_rbf_x, 'ro', color='r', markersize=2)
+        plt.show()
 
     def predict(self, prn, ):
         """Predicts the position of a satellite using
@@ -73,6 +117,8 @@ class Sp3(object):
         This function is called after the fit method. It will predict the
         """
 
-
 sp3 = Sp3()
 sp3.parse('/home/anonyme/igu18222_00.sp3')
+sp3.dataset = sp3.dataset[(sp3.dataset['PRN']=='G01') & (sp3.dataset['date_time']<'2014-09-12 00:00:00')]
+sp3.fit()
+print(sp3.dataset.head())
